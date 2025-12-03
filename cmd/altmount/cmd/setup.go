@@ -15,6 +15,7 @@ import (
 	"github.com/javi11/altmount/internal/api"
 	"github.com/javi11/altmount/internal/arrs"
 	"github.com/javi11/altmount/internal/auth"
+	"github.com/javi11/altmount/internal/cache"
 	"github.com/javi11/altmount/internal/config"
 	"github.com/javi11/altmount/internal/database"
 	"github.com/javi11/altmount/internal/health"
@@ -223,12 +224,21 @@ func setupAuthService(ctx context.Context, userRepo *database.UserRepository) *a
 	return authService
 }
 
+// setupAPIKeyCache creates and starts the API key cache for fast authentication
+func setupAPIKeyCache(ctx context.Context, userRepo *database.UserRepository) *cache.APIKeyCache {
+	// 30 second TTL for API key cache refresh
+	apiKeyCache := cache.NewAPIKeyCache(userRepo, 30*time.Second)
+	apiKeyCache.Start(ctx)
+	slog.InfoContext(ctx, "API key cache initialized")
+	return apiKeyCache
+}
+
 // setupStreamHandler creates the HTTP stream handler for file streaming
 func setupStreamHandler(
 	nzbFilesystem *nzbfilesystem.NzbFilesystem,
-	userRepo *database.UserRepository,
+	apiKeyCache *cache.APIKeyCache,
 ) *api.StreamHandler {
-	return api.NewStreamHandler(nzbFilesystem, userRepo)
+	return api.NewStreamHandler(nzbFilesystem, apiKeyCache)
 }
 
 // setupAPIServer creates and configures the API server

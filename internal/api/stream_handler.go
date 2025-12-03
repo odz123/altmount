@@ -2,15 +2,13 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"log/slog"
 	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 
-	"github.com/javi11/altmount/internal/database"
+	"github.com/javi11/altmount/internal/cache"
 	"github.com/javi11/altmount/internal/nzbfilesystem"
 	"github.com/javi11/altmount/internal/utils"
 )
@@ -20,19 +18,19 @@ import (
 // and proper HTTP caching semantics
 type StreamHandler struct {
 	nzbFilesystem *nzbfilesystem.NzbFilesystem
-	userRepo      *database.UserRepository
+	apiKeyCache   *cache.APIKeyCache
 }
 
-// NewStreamHandler creates a new stream handler with the provided filesystem and user repository
-func NewStreamHandler(fs *nzbfilesystem.NzbFilesystem, userRepo *database.UserRepository) *StreamHandler {
+// NewStreamHandler creates a new stream handler with the provided filesystem and API key cache
+func NewStreamHandler(fs *nzbfilesystem.NzbFilesystem, apiKeyCache *cache.APIKeyCache) *StreamHandler {
 	return &StreamHandler{
 		nzbFilesystem: fs,
-		userRepo:      userRepo,
+		apiKeyCache:   apiKeyCache,
 	}
 }
 
-// authenticate validates the download_key parameter against user API keys
-// Returns true if the download_key matches a hashed API key from any user
+// authenticate validates the download_key parameter against cached API keys
+// Returns true if the download_key matches a hashed API key (O(1) lookup)
 func (h *StreamHandler) authenticate(r *http.Request) bool {
 	ctx := r.Context()
 
@@ -45,39 +43,15 @@ func (h *StreamHandler) authenticate(r *http.Request) bool {
 		return false
 	}
 
-	// Get all users with API keys
-	users, err := h.userRepo.GetAllUsers(ctx)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to get users for authentication",
-			"error", err)
-		return false
-	}
-
-	// Check download_key against hashed API keys
-	for _, user := range users {
-		if user.APIKey == nil || *user.APIKey == "" {
-			continue
-		}
-
-		// Hash the user's API key with SHA256
-		hashedKey := hashAPIKey(*user.APIKey)
-
-		// Compare with provided download_key (constant-time comparison for security)
-		if hashedKey == downloadKey {
-			return true
-		}
+	// O(1) lookup in cached API keys - no database query needed
+	if h.apiKeyCache.IsValidKey(downloadKey) {
+		return true
 	}
 
 	slog.WarnContext(ctx, "Stream authentication failed - invalid download_key",
 		"path", r.URL.Query().Get("path"),
 		"remote_addr", r.RemoteAddr)
 	return false
-}
-
-// hashAPIKey generates a SHA256 hash of the API key for secure comparison
-func hashAPIKey(apiKey string) string {
-	hash := sha256.Sum256([]byte(apiKey))
-	return hex.EncodeToString(hash[:])
 }
 
 // GetHTTPHandler returns an http.Handler that serves files from NzbFilesystem

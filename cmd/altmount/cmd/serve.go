@@ -129,8 +129,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Create stream handler for file streaming
-	streamHandler := setupStreamHandler(fs, repos.UserRepo)
+	// Create API key cache for fast stream authentication (O(1) lookup vs O(n) database queries)
+	apiKeyCache := setupAPIKeyCache(ctx, repos.UserRepo)
+
+	// Create stream handler for file streaming with cached authentication
+	streamHandler := setupStreamHandler(fs, apiKeyCache)
 
 	// Setup SPA routes
 	setupSPARoutes(app)

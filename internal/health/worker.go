@@ -567,7 +567,16 @@ func (hw *HealthWorker) processRepairNotification(ctx context.Context, fileHealt
 	return nil
 }
 
-// runHealthCheckCycle runs a single cycle of health checks
+// getMaxConcurrentJobs returns the configured maximum concurrent jobs (default: 4)
+func (hw *HealthWorker) getMaxConcurrentJobs() int {
+	cfg := hw.configGetter()
+	if cfg.Health.MaxConcurrentJobs != nil && *cfg.Health.MaxConcurrentJobs > 0 {
+		return *cfg.Health.MaxConcurrentJobs
+	}
+	return 4 // Default: 4 concurrent health checks
+}
+
+// runHealthCheckCycle runs a single cycle of health checks with concurrent processing
 func (hw *HealthWorker) runHealthCheckCycle(ctx context.Context) error {
 	// Set the cycle running flag
 	hw.mu.Lock()
@@ -582,21 +591,21 @@ func (hw *HealthWorker) runHealthCheckCycle(ctx context.Context) error {
 	}()
 
 	now := time.Now()
+	maxConcurrent := hw.getMaxConcurrentJobs()
+
 	hw.updateStats(func(s *WorkerStats) {
 		s.CurrentRunStartTime = &now
 		s.CurrentRunFilesChecked = 0
 	})
 
-	// Get files due for checking (ordered by scheduled_check_at)
-	// Hardcoded to 1 - process one file at a time
-	unhealthyFiles, err := hw.healthRepo.GetUnhealthyFiles(ctx, 1)
+	// Get files due for checking - fetch batch based on max concurrent jobs
+	unhealthyFiles, err := hw.healthRepo.GetUnhealthyFiles(ctx, maxConcurrent)
 	if err != nil {
 		return fmt.Errorf("failed to get unhealthy files: %w", err)
 	}
 
 	// Get files that need repair notifications
-	// Hardcoded to 1 - process one file at a time
-	repairFiles, err := hw.healthRepo.GetFilesForRepairNotification(ctx, 1)
+	repairFiles, err := hw.healthRepo.GetFilesForRepairNotification(ctx, maxConcurrent)
 	if err != nil {
 		return fmt.Errorf("failed to get files for repair notification: %w", err)
 	}
@@ -618,45 +627,46 @@ func (hw *HealthWorker) runHealthCheckCycle(ctx context.Context) error {
 		"health_check_files", len(unhealthyFiles),
 		"repair_notification_files", len(repairFiles),
 		"total", totalFiles,
-		"max_concurrent_jobs", 1)
+		"max_concurrent_jobs", maxConcurrent)
 
 	// Process files in parallel using conc
 	wg := conc.NewWaitGroup()
 
-	// Process health check files
+	// Process health check files with proper closure capture
 	for _, fileHealth := range unhealthyFiles {
+		fh := fileHealth // Capture for closure
 		wg.Go(func() {
-			slog.InfoContext(ctx, "Checking unhealthy file", "file_path", fileHealth.FilePath)
+			slog.DebugContext(ctx, "Checking unhealthy file", "file_path", fh.FilePath)
 
 			// Set checking status
-			err := hw.healthRepo.SetFileChecking(ctx, fileHealth.FilePath)
+			err := hw.healthRepo.SetFileChecking(ctx, fh.FilePath)
 			if err != nil {
-				slog.ErrorContext(ctx, "Failed to set file checking status", "file_path", fileHealth.FilePath, "error", err)
+				slog.ErrorContext(ctx, "Failed to set file checking status", "file_path", fh.FilePath, "error", err)
 				return
 			}
 
 			// Use performDirectCheck which provides cancellation infrastructure
-			err = hw.performDirectCheck(ctx, fileHealth.FilePath)
+			err = hw.performDirectCheck(ctx, fh.FilePath)
 			if err != nil {
-				slog.ErrorContext(ctx, "Health check failed", "file_path", fileHealth.FilePath, "error", err)
-				// performDirectCheck already handled the result and stats
+				slog.ErrorContext(ctx, "Health check failed", "file_path", fh.FilePath, "error", err)
 			}
 
-			// Update cycle progress stats (performDirectCheck updates individual file stats)
+			// Update cycle progress stats
 			hw.updateStats(func(s *WorkerStats) {
 				s.CurrentRunFilesChecked++
 			})
 		})
 	}
 
-	// Process repair notification files
+	// Process repair notification files with proper closure capture
 	for _, fileHealth := range repairFiles {
+		fh := fileHealth // Capture for closure
 		wg.Go(func() {
-			slog.InfoContext(ctx, "Processing repair notification for file", "file_path", fileHealth.FilePath)
+			slog.DebugContext(ctx, "Processing repair notification for file", "file_path", fh.FilePath)
 
-			err := hw.processRepairNotification(ctx, fileHealth)
+			err := hw.processRepairNotification(ctx, fh)
 			if err != nil {
-				slog.ErrorContext(ctx, "Repair notification failed", "file_path", fileHealth.FilePath, "error", err)
+				slog.ErrorContext(ctx, "Repair notification failed", "file_path", fh.FilePath, "error", err)
 			}
 
 			// Update cycle progress stats
@@ -683,6 +693,7 @@ func (hw *HealthWorker) runHealthCheckCycle(ctx context.Context) error {
 		"health_check_files", len(unhealthyFiles),
 		"repair_notification_files", len(repairFiles),
 		"total_files", totalFiles,
+		"max_concurrent", maxConcurrent,
 		"duration", time.Since(now))
 
 	return nil

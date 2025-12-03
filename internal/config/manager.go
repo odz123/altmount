@@ -166,6 +166,7 @@ type HealthConfig struct {
 	SegmentSamplePercentage       int     `yaml:"segment_sample_percentage" mapstructure:"segment_sample_percentage" json:"segment_sample_percentage,omitempty"`
 	LibrarySyncIntervalMinutes    int     `yaml:"library_sync_interval_minutes" mapstructure:"library_sync_interval_minutes" json:"library_sync_interval_minutes,omitempty"`
 	LibrarySyncConcurrency        int     `yaml:"library_sync_concurrency" mapstructure:"library_sync_concurrency" json:"library_sync_concurrency,omitempty"`
+	MaxConcurrentJobs             *int    `yaml:"max_concurrent_jobs" mapstructure:"max_concurrent_jobs" json:"max_concurrent_jobs,omitempty"` // Max concurrent health check jobs (default: 4)
 }
 
 // GenerateProviderID creates a unique ID based on host, port, and username
@@ -334,6 +335,14 @@ func (c *Config) DeepCopy() *Config {
 		copyCfg.Health.CleanupOrphanedFiles = &v
 	} else {
 		copyCfg.Health.CleanupOrphanedFiles = nil
+	}
+
+	// Deep copy Health.MaxConcurrentJobs pointer
+	if c.Health.MaxConcurrentJobs != nil {
+		v := *c.Health.MaxConcurrentJobs
+		copyCfg.Health.MaxConcurrentJobs = &v
+	} else {
+		copyCfg.Health.MaxConcurrentJobs = nil
 	}
 
 	// Deep copy Metadata.DeleteSourceNzbOnRemoval pointer
