@@ -1,24 +1,12 @@
-import {
-	AlertCircle,
-	ChevronDown,
-	ChevronUp,
-	Download,
-	MoreHorizontal,
-	Pause,
-	Play,
-	PlayCircle,
-	RefreshCw,
-	Trash2,
-	XCircle,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Pause, Play, RefreshCw, Trash2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DragDropUpload } from "../components/queue/DragDropUpload";
 import { ManualScanSection } from "../components/queue/ManualScanSection";
+import { QueueTableRow } from "../components/queue/QueueTableRow";
+import { CountdownDisplay } from "../components/ui/CountdownDisplay";
 import { ErrorAlert } from "../components/ui/ErrorAlert";
 import { LoadingTable } from "../components/ui/LoadingSpinner";
 import { Pagination } from "../components/ui/Pagination";
-import { PathDisplay } from "../components/ui/PathDisplay";
-import { StatusBadge } from "../components/ui/StatusBadge";
 import { useConfirm } from "../contexts/ModalContext";
 import {
 	useBulkCancelQueueItems,
@@ -34,8 +22,8 @@ import {
 	useRetryQueueItem,
 } from "../hooks/useApi";
 import { useProgressStream } from "../hooks/useProgressStream";
-import { formatBytes, formatRelativeTime, truncateText } from "../lib/utils";
-import { type QueueItem, QueueStatus } from "../types/api";
+import type { QueueItem } from "../types/api";
+import { QueueStatus } from "../types/api";
 
 export function QueuePage() {
 	const [page, setPage] = useState(0);
@@ -43,9 +31,7 @@ export function QueuePage() {
 	const [searchTerm, setSearchTerm] = useState("");
 	const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
 	const [refreshInterval, setRefreshInterval] = useState(5000); // 5 seconds default
-	const [nextRefreshTime, setNextRefreshTime] = useState<Date | null>(null);
 	const [userInteracting, setUserInteracting] = useState(false);
-	const [countdown, setCountdown] = useState(0);
 	const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
 	const [sortBy, setSortBy] = useState<"created_at" | "updated_at" | "status" | "nzb_path">(
 		"updated_at",
@@ -204,12 +190,10 @@ export function QueuePage() {
 
 	const toggleAutoRefresh = () => {
 		setAutoRefreshEnabled(!autoRefreshEnabled);
-		setNextRefreshTime(null);
 	};
 
 	const handleRefreshIntervalChange = (interval: number) => {
 		setRefreshInterval(interval);
-		setNextRefreshTime(null);
 	};
 
 	// Multi-select handlers
@@ -330,22 +314,6 @@ export function QueuePage() {
 		queueData && queueData.length > 0 && queueData.every((item) => selectedItems.has(item.id));
 	const isIndeterminate = queueData && selectedItems.size > 0 && !isAllSelected;
 
-	// Update next refresh time when auto-refresh is enabled
-	useEffect(() => {
-		if (autoRefreshEnabled && !userInteracting) {
-			// Set initial next refresh time
-			setNextRefreshTime(new Date(Date.now() + refreshInterval));
-
-			// Reset the timer every time React Query refetches
-			const interval = setInterval(() => {
-				setNextRefreshTime(new Date(Date.now() + refreshInterval));
-			}, refreshInterval);
-
-			return () => clearInterval(interval);
-		}
-		setNextRefreshTime(null);
-	}, [autoRefreshEnabled, refreshInterval, userInteracting]);
-
 	// Pause auto-refresh during user interactions
 	const handleUserInteractionStart = () => {
 		setUserInteracting(true);
@@ -359,28 +327,6 @@ export function QueuePage() {
 
 		return () => clearTimeout(timer);
 	};
-
-	// Update countdown timer every second
-	useEffect(() => {
-		if (nextRefreshTime && autoRefreshEnabled && !userInteracting) {
-			const updateCountdown = () => {
-				const remaining = Math.max(0, Math.ceil((nextRefreshTime.getTime() - Date.now()) / 1000));
-				setCountdown(remaining);
-
-				// If countdown reaches 0, reset to the full interval (handles any sync issues)
-				if (remaining === 0) {
-					setNextRefreshTime(new Date(Date.now() + refreshInterval));
-				}
-			};
-
-			// Initial countdown update
-			updateCountdown();
-			const timer = setInterval(updateCountdown, 1000);
-
-			return () => clearInterval(timer);
-		}
-		setCountdown(0);
-	}, [nextRefreshTime, autoRefreshEnabled, userInteracting, refreshInterval]);
 
 	// Reset to page 1 when search or status filter changes
 	useEffect(() => {
@@ -409,12 +355,11 @@ export function QueuePage() {
 					<h1 className="font-bold text-3xl">Queue Management</h1>
 					<p className="text-base-content/70">
 						Manage and monitor your download queue
-						{autoRefreshEnabled && !userInteracting && countdown > 0 && (
-							<span className="ml-2 text-info text-sm">• Auto-refresh in {countdown}s</span>
-						)}
-						{userInteracting && autoRefreshEnabled && (
-							<span className="ml-2 text-sm text-warning">• Auto-refresh paused</span>
-						)}
+						<CountdownDisplay
+							enabled={autoRefreshEnabled}
+							interval={refreshInterval}
+							paused={userInteracting}
+						/>
 					</p>
 				</div>
 				<div className="flex flex-wrap gap-2">
@@ -675,142 +620,19 @@ export function QueuePage() {
 							</thead>
 							<tbody>
 								{enrichedQueueData?.map((item: QueueItem) => (
-									<tr
+									<QueueTableRow
 										key={item.id}
-										className={`hover ${selectedItems.has(item.id) ? "bg-base-200" : ""}`}
-									>
-										<td>
-											<label className="cursor-pointer">
-												<input
-													type="checkbox"
-													className="checkbox"
-													checked={selectedItems.has(item.id)}
-													onChange={(e) => handleSelectItem(item.id, e.target.checked)}
-												/>
-											</label>
-										</td>
-										<td>
-											<div className="flex items-center space-x-3">
-												<Download className="h-4 w-4 text-primary" />
-												<div>
-													<div className="font-bold">
-														<PathDisplay path={item.nzb_path} maxLength={90} showFileName={true} />
-													</div>
-													<div className="text-base-content/70 text-sm">ID: {item.id}</div>
-												</div>
-											</div>
-										</td>
-										<td>
-											<PathDisplay path={item.target_path} maxLength={50} className="text-sm" />
-										</td>
-										<td>
-											{item.category ? (
-												<span className="badge badge-outline badge-sm">{item.category}</span>
-											) : (
-												<span className="text-base-content/50 text-sm">—</span>
-											)}
-										</td>
-										<td>
-											{item.file_size ? (
-												<span className="text-sm">{formatBytes(item.file_size)}</span>
-											) : (
-												<span className="text-base-content/50 text-sm">—</span>
-											)}
-										</td>
-										<td>
-											<div className="flex flex-col gap-1">
-												{item.status === QueueStatus.FAILED && item.error_message ? (
-													<div
-														className="tooltip tooltip-top"
-														data-tip={truncateText(item.error_message, 200)}
-													>
-														<div className="flex items-center gap-1">
-															<StatusBadge status={item.status} />
-															<AlertCircle className="h-3 w-3 text-error" />
-														</div>
-													</div>
-												) : item.status === QueueStatus.PROCESSING && item.percentage != null ? (
-													<div className="flex items-center gap-2">
-														<progress
-															className="progress progress-primary w-24"
-															value={item.percentage}
-															max={100}
-														/>
-														<span className="text-xs">{item.percentage}%</span>
-													</div>
-												) : (
-													<StatusBadge status={item.status} />
-												)}
-											</div>
-										</td>
-										<td>
-											<span
-												className={`badge ${item.retry_count > 0 ? "badge-warning" : "badge-ghost"}`}
-											>
-												{item.retry_count}
-											</span>
-										</td>
-										<td>
-											<span className="text-base-content/70 text-sm">
-												{formatRelativeTime(item.updated_at)}
-											</span>
-										</td>
-										<td>
-											<div className="dropdown dropdown-end">
-												<button tabIndex={0} type="button" className="btn btn-ghost btn-sm">
-													<MoreHorizontal className="h-4 w-4" />
-												</button>
-												<ul className="dropdown-content menu w-48 rounded-box bg-base-100 shadow-lg">
-													{(item.status === QueueStatus.PENDING ||
-														item.status === QueueStatus.FAILED ||
-														item.status === QueueStatus.COMPLETED) && (
-														<li>
-															<button
-																type="button"
-																onClick={() => handleRetry(item.id)}
-																disabled={retryItem.isPending}
-															>
-																<PlayCircle className="h-4 w-4" />
-																{item.status === QueueStatus.PENDING ? "Process" : "Retry"}
-															</button>
-														</li>
-													)}
-													{item.status === QueueStatus.PROCESSING && (
-														<li>
-															<button
-																type="button"
-																onClick={() => handleCancel(item.id)}
-																disabled={cancelItem.isPending}
-																className="text-warning"
-															>
-																<XCircle className="h-4 w-4" />
-																Cancel
-															</button>
-														</li>
-													)}
-													<li>
-														<button type="button" onClick={() => handleDownload(item.id)}>
-															<Download className="h-4 w-4" />
-															Download NZB
-														</button>
-													</li>
-													{item.status !== QueueStatus.PROCESSING && (
-														<li>
-															<button
-																type="button"
-																onClick={() => handleDelete(item.id)}
-																disabled={deleteItem.isPending}
-																className="text-error"
-															>
-																<Trash2 className="h-4 w-4" />
-																Delete
-															</button>
-														</li>
-													)}
-												</ul>
-											</div>
-										</td>
-									</tr>
+										item={item}
+										isSelected={selectedItems.has(item.id)}
+										isDeletePending={deleteItem.isPending}
+										isRetryPending={retryItem.isPending}
+										isCancelPending={cancelItem.isPending}
+										onSelectItem={handleSelectItem}
+										onRetry={handleRetry}
+										onCancel={handleCancel}
+										onDownload={handleDownload}
+										onDelete={handleDelete}
+									/>
 								))}
 							</tbody>
 						</table>

@@ -1,4 +1,5 @@
 import { Heart } from "lucide-react";
+import { memo } from "react";
 import { HealthBadge } from "../../../../components/ui/StatusBadge";
 import { formatFutureTime, formatRelativeTime, truncateText } from "../../../../lib/utils";
 import type { FileHealth } from "../../../../types/api";
@@ -18,7 +19,7 @@ interface HealthTableRowProps {
 	onDelete: (id: number) => void;
 }
 
-export function HealthTableRow({
+export const HealthTableRow = memo(function HealthTableRow({
 	item,
 	isSelected,
 	isCancelPending,
@@ -132,4 +133,7 @@ export function HealthTableRow({
 			</td>
 		</tr>
 	);
-}
+});
+
+// Custom comparison for memo - only re-render if relevant props change
+HealthTableRow.displayName = "HealthTableRow";

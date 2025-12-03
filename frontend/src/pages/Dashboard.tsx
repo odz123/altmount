@@ -1,12 +1,28 @@
 import { AlertTriangle, CheckCircle, Download, Network } from "lucide-react";
-import { useMemo } from "react";
-import { HealthChart, QueueChart } from "../components/charts/QueueChart";
+import { Suspense, lazy, useMemo } from "react";
 import { PoolMetricsCard } from "../components/system/PoolMetricsCard";
 import { ProviderCard } from "../components/system/ProviderCard";
 import { ErrorAlert } from "../components/ui/ErrorAlert";
 import { LoadingSpinner } from "../components/ui/LoadingSpinner";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import { useHealthStats, usePoolMetrics, useQueueStats } from "../hooks/useApi";
+
+// Lazy load chart components (Recharts is heavy)
+const QueueChart = lazy(() =>
+	import("../components/charts/QueueChart").then((module) => ({ default: module.QueueChart })),
+);
+const HealthChart = lazy(() =>
+	import("../components/charts/QueueChart").then((module) => ({ default: module.HealthChart })),
+);
+
+// Chart loading fallback
+function ChartLoader() {
+	return (
+		<div className="flex h-64 items-center justify-center">
+			<LoadingSpinner size="lg" />
+		</div>
+	);
+}
 
 export function Dashboard() {
 	const { data: queueStats, error: queueError } = useQueueStats();
@@ -176,7 +192,9 @@ export function Dashboard() {
 							<Download className="h-5 w-5" />
 							Queue Distribution
 						</h2>
-						<QueueChart />
+						<Suspense fallback={<ChartLoader />}>
+							<QueueChart />
+						</Suspense>
 					</div>
 				</div>
 
@@ -186,7 +204,9 @@ export function Dashboard() {
 							<CheckCircle className="h-5 w-5" />
 							File Health Status
 						</h2>
-						<HealthChart />
+						<Suspense fallback={<ChartLoader />}>
+							<HealthChart />
+						</Suspense>
 					</div>
 				</div>
 			</div>

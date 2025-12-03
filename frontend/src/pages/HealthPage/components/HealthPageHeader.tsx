@@ -1,9 +1,9 @@
 import { Pause, Play, RefreshCw, Trash2 } from "lucide-react";
+import { CountdownDisplay } from "../../../components/ui/CountdownDisplay";
 
 interface HealthPageHeaderProps {
 	autoRefreshEnabled: boolean;
 	refreshInterval: number;
-	countdown: number;
 	userInteracting: boolean;
 	isLoading: boolean;
 	isCleanupPending: boolean;
@@ -18,7 +18,6 @@ interface HealthPageHeaderProps {
 export function HealthPageHeader({
 	autoRefreshEnabled,
 	refreshInterval,
-	countdown,
 	userInteracting,
 	isLoading,
 	isCleanupPending,
@@ -35,12 +34,11 @@ export function HealthPageHeader({
 				<h1 className="font-bold text-3xl">Health Monitoring</h1>
 				<p className="text-base-content/70">
 					Monitor file integrity status - view all files being health checked
-					{autoRefreshEnabled && !userInteracting && countdown > 0 && (
-						<span className="ml-2 text-info text-sm">• Auto-refresh in {countdown}s</span>
-					)}
-					{userInteracting && autoRefreshEnabled && (
-						<span className="ml-2 text-sm text-warning">• Auto-refresh paused</span>
-					)}
+					<CountdownDisplay
+						enabled={autoRefreshEnabled}
+						interval={refreshInterval}
+						paused={userInteracting}
+					/>
 				</p>
 			</div>
 			<div className="flex flex-wrap gap-2">
