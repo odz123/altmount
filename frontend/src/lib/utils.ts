@@ -120,3 +120,14 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
 export function isNil(value: unknown): value is null | undefined {
 	return value === null || value === undefined;
 }
+
+/**
+ * Format bytes per second to a human-readable speed string
+ */
+export function formatSpeed(bytesPerSec: number): string {
+	if (bytesPerSec === 0) return "0 B/s";
+	const units = ["B/s", "KB/s", "MB/s", "GB/s"];
+	const index = Math.floor(Math.log(bytesPerSec) / Math.log(1024));
+	const value = bytesPerSec / 1024 ** index;
+	return `${value.toFixed(1)} ${units[index]}`;
+}

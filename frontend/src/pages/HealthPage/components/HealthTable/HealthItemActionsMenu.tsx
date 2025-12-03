@@ -1,4 +1,5 @@
 import { MoreHorizontal, PlayCircle, Trash2, Wrench, X } from "lucide-react";
+import { memo } from "react";
 import type { FileHealth } from "../../../../types/api";
 
 interface HealthItemActionsMenuProps {
@@ -13,7 +14,7 @@ interface HealthItemActionsMenuProps {
 	onDelete: (id: number) => void;
 }
 
-export function HealthItemActionsMenu({
+export const HealthItemActionsMenu = memo(function HealthItemActionsMenu({
 	item,
 	isCancelPending,
 	isDirectCheckPending,
@@ -79,4 +80,6 @@ export function HealthItemActionsMenu({
 			</ul>
 		</div>
 	);
-}
+});
+
+HealthItemActionsMenu.displayName = "HealthItemActionsMenu";

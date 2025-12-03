@@ -1,5 +1,7 @@
 import { Network } from "lucide-react";
+import { memo } from "react";
 import { usePoolMetrics } from "../../hooks/useApi";
+import { formatSpeed } from "../../lib/utils";
 import { BytesDisplay } from "../ui/BytesDisplay";
 import { LoadingSpinner } from "../ui/LoadingSpinner";
 
@@ -7,17 +9,8 @@ interface PoolMetricsCardProps {
 	className?: string;
 }
 
-export function PoolMetricsCard({ className }: PoolMetricsCardProps) {
+export const PoolMetricsCard = memo(function PoolMetricsCard({ className }: PoolMetricsCardProps) {
 	const { data: poolMetrics, isLoading, error } = usePoolMetrics();
-
-	// Helper function to format speed
-	const formatSpeed = (bytesPerSec: number) => {
-		if (bytesPerSec === 0) return "0 B/s";
-		const units = ["B/s", "KB/s", "MB/s", "GB/s"];
-		const index = Math.floor(Math.log(bytesPerSec) / Math.log(1024));
-		const value = bytesPerSec / 1024 ** index;
-		return `${value.toFixed(1)} ${units[index]}`;
-	};
 
 	if (error) {
 		return (
@@ -100,4 +93,6 @@ export function PoolMetricsCard({ className }: PoolMetricsCardProps) {
 			</div>
 		</div>
 	);
-}
+});
+
+PoolMetricsCard.displayName = "PoolMetricsCard";
